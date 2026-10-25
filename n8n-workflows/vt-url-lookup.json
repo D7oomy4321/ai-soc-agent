@@ -1,0 +1,115 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "url"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "87108cdc-5140-4c4b-808f-48e2f8411630",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url = String($input.first().json.url || '').trim();\nif (!url) {\n  return [{ json: { url: '', id: '', no_url: true } }];\n}\nconst b64 = typeof Buffer !== 'undefined'\n  ? Buffer.from(url).toString('base64')\n  : btoa(unescape(encodeURIComponent(url)));\nconst id = b64.replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\nreturn [{ json: { url, id, no_url: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "e60798a1-b3b7-441e-a7e2-eb276e8f2711",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/urls/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "id": "4b815d24-46f4-4de9-b0af-18d28c7f4e64",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Code in JavaScript').first().json;\nif (prep.error) return [{ json: { url: '', found: false, verdict: 'unknown', note: 'No URL was received. Do not claim the URL was checked.' } }];\nconst res = $input.first().json;\nconst code = res.statusCode;\nif (code === 404) return [{ json: { url: prep.url, found: false, verdict: 'unknown', note: 'VirusTotal has no report for this URL. It was not scanned. Do not claim a scan result.' } }];\nif (code !== 200 || !res.body || !res.body.data) return [{ json: { url: prep.url, found: false, verdict: 'unknown', note: `VirusTotal lookup failed (HTTP ${code}). Treat reputation as unknown.` } }];\nconst a = res.body.data.attributes || {};\nconst s = a.last_analysis_stats || {};\nconst m = s.malicious || 0, su = s.suspicious || 0, h = s.harmless || 0, u = s.undetected || 0;\nlet verdict = 'clean';\nif (m >= 3) verdict = 'malicious'; else if (m >= 1 || su >= 2) verdict = 'suspicious';\nconst flagged = Object.entries(a.last_analysis_results || {}).filter(([, r]) => r.category === 'malicious').map(([n, r]) => `${n}: ${r.result}`).slice(0, 5);\nreturn [{ json: { url: prep.url, found: true, verdict, malicious: m, suspicious: su, harmless: h, undetected: u, total_engines: m + su + h + u + (s.timeout || 0), reputation: a.reputation ?? null, last_analysis_date: a.last_analysis_date ? new Date(a.last_analysis_date * 1000).toISOString() : null, flagged_by: flagged } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "de4ee89d-483e-47f0-a1c4-cceb0d6a3ee2",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {}
+}
