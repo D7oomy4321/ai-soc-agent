@@ -1,0 +1,84 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "soc-triage",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "fe3942c0-742a-4b30-8ccf-b603d1e3fdbd",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "agentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_AGENT_ID",
+          "cachedResultName": "فرز الحوادث السيبرانية"
+        },
+        "message": "=[CONSOLE]\nWrite every text value as an object with two versions of the same meaning: {\"ar\": \"...\", \"en\": \"...\"}. Keep JSON keys, mitre, target, and the values of severity, confidence and category in English only.\n\nAlert:\n{{ $json.body.alert }}",
+        "useStructuredOutput": true,
+        "schemaType": "manual",
+        "outputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"incident_summary\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false},\n    \"incident_type\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false},\n    \"mitre\": {\"type\": \"string\"},\n    \"severity\": {\"type\": \"string\", \"enum\": [\"low\", \"medium\", \"high\", \"critical\"]},\n    \"confidence\": {\"type\": \"string\", \"enum\": [\"low\", \"medium\", \"high\"]},\n    \"reasons\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false}},\n    \"missing_info\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false}},\n    \"actions\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"title\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false},\n          \"category\": {\"type\": \"string\", \"enum\": [\"system\", \"advisory\"]},\n          \"target\": {\"type\": \"string\"},\n          \"justification\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false},\n          \"impact\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false},\n          \"rollback\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false}\n        },\n        \"required\": [\"title\", \"category\", \"target\", \"justification\", \"impact\", \"rollback\"],\n        \"additionalProperties\": false\n      }\n    },\n    \"controls\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"ar\": {\"type\": \"string\"}, \"en\": {\"type\": \"string\"}}, \"required\": [\"ar\", \"en\"], \"additionalProperties\": false}}\n  },\n  \"required\": [\"incident_summary\", \"incident_type\", \"mitre\", \"severity\", \"confidence\", \"reasons\", \"missing_info\", \"actions\", \"controls\"],\n  \"additionalProperties\": false\n}",
+        "advanced": {}
+      },
+      "type": "n8n-nodes-base.messageAnAgent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        -48
+      ],
+      "id": "a3205a1c-8bd7-46a6-820c-f171a87effae",
+      "name": "Message an Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        0
+      ],
+      "id": "0777e719-a468-4f07-bffd-42a01fcece32",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Message an Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message an Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {}
+}

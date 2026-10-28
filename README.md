@@ -1,6 +1,6 @@
 # AI SOC Agents
 
-An AI-assisted Security Operations Center (SOC) that triages security alerts with LLM agents, enriches them with threat intelligence, and keeps a **human analyst in the loop** for every response action.
+An AI-assisted Security Operations Center (SOC) that triages security alerts with an LLM agent, enriches them with threat intelligence, and keeps a **human analyst in the loop** for every response action.
 
 > Graduation project — Computer Engineering, Yanbu Industrial College (YIC).
 
@@ -10,57 +10,68 @@ An AI-assisted Security Operations Center (SOC) that triages security alerts wit
  Alert (phishing email, URL, log event)
             │
             ▼
- ┌──────────────────────┐      ┌───────────────────────┐
- │  Web console         │ POST │  n8n: soc-triage      │
- │  (web/index.html)    │─────▶│  AI agent (Gemini)    │──▶ VT URL Lookup (VirusTotal)
- └──────────────────────┘      └───────────────────────┘
-            ▲                              │ structured JSON verdict
-            │◀─────────────────────────────┘ (severity, IOCs, proposed actions)
-            │
+ ┌────────────────────┐  POST /triage   ┌──────────────────────────────┐
+ │  Platform          │───────────────▶ │  Backend (Python FastAPI)    │
+ │  web/index.html    │                 │  Triage Agent                │
+ │                    │◀─────────────── │   ├─ VirusTotal URL lookup   │
+ └────────────────────┘  JSON report    │   └─ Gemini (structured out) │
+            │                           └──────────────────────────────┘
    Analyst approves / rejects
-            │ POST
+            │ POST /decision
             ▼
- ┌──────────────────────┐
- │  n8n: soc-decision   │──▶ Google Sheets audit log
- └──────────────────────┘
+     SQLite audit log (soc_audit.db)
 ```
 
-**Key principle:** the agent only *proposes* actions. Nothing is executed until an analyst approves it through the console, and every decision is written to an audit log.
+**Key principle:** the agent only *proposes* actions. Nothing is executed without an analyst decision, and every decision is recorded.
 
 ## Repository layout
 
 | Path | Contents |
 |------|----------|
-| `web/index.html` | Project landing page + multi-page SOC console (dashboard, incidents, analyze, approvals, audit log, reports, agents, knowledge base, integrations). Single self-contained file. |
-| `n8n-workflows/soc-decision.json` | Receives analyst decisions and appends them to the audit log sheet. |
-| `n8n-workflows/vt-url-lookup.json` | Sub-workflow: URL → VirusTotal v3 lookup → `clean / suspicious / malicious / unknown` verdict. |
-| `n8n-workflows/soc-triage.json` | Main triage workflow: webhook → *Message an Agent* (bilingual AR/EN structured output: summary, type, MITRE, severity, confidence, reasons, missing info, proposed actions with impact & rollback, controls) → respond. |
+| `backend/` | Python FastAPI server: Triage Agent (Gemini + VirusTotal), SQLite audit log. See `backend/README.md`. |
+| `web/index.html` | Project landing page + multi-page SOC platform (dashboard, incidents, analyze, approvals, audit log, reports, agents, knowledge base, integrations). Single self-contained file. |
+| `prototype-n8n/` | The first prototype, built as n8n workflows (kept for reference). |
 | `docs/` | Report, screenshots, demo video. |
 
-## Setup
+## Quick start
 
-### 1. n8n
-1. Import each file in `n8n-workflows/` (**Workflows → Import from File**).
-2. Create credentials and select them in the nodes:
-   - **Google Gemini API** — for the triage agent.
-   - **Header Auth** — name `x-apikey`, value = your VirusTotal API key (used by *VT URL Lookup*).
-   - **Google Sheets OAuth2** — for the audit log.
-3. In *soc-triage*, create an n8n Agent (Gemini model, with *VT URL Lookup* as a tool) and select it in **Message an Agent** (replaces `YOUR_AGENT_ID`).
-4. In *soc-decision*, replace `YOUR_GOOGLE_SHEET_ID` with your sheet. The sheet needs the columns:
-   `incident_id, action, target, decision, analyst_note, decided_at, severity`.
-5. Activate the workflows and copy the **Production** webhook URLs.
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate             # macOS/Linux: source venv/bin/activate
+pip install -r requirements.txt
+copy .env.example .env            # put your GEMINI_API_KEY and VT_API_KEY in .env
+uvicorn main:app --reload
+```
 
-### 2. Web console
-1. Open `web/index.html` locally in a browser (download it — do not run it inside a sandboxed preview, outbound calls are blocked there).
-2. Go to **Integrations**, paste the two webhook URLs (`…/webhook/soc-triage` and `…/webhook/soc-decision`), then **Save** and **Test connection**.
-   The URLs are stored only in your browser (`localStorage`), never in the file.
+Open **http://127.0.0.1:8000/app** — the platform connects to the backend automatically.
+
+| URL | What it is |
+|-----|------------|
+| http://127.0.0.1:8000/app | the platform |
+| http://127.0.0.1:8000/docs | try the API |
+| http://127.0.0.1:8000/audit/view | analyst decision log |
+
+## Agents
+
+| Agent | Role | Status |
+|-------|------|--------|
+| Triage | Classifies type, severity, confidence; proposes actions with impact and rollback | **Running** |
+| Orchestrator | Routes alerts to agents and merges results | Planned |
+| Threat intelligence | Checks IPs, domains, hashes, CVEs | Planned |
+| Forensic investigation | Rebuilds the timeline and scope from logs | Planned |
+| Case history | Finds similar past incidents | Planned |
+| Report writer | Writes the report and cites NCA controls (RAG) | Planned |
 
 ## Security notes
-- No API keys are stored in this repository. All secrets live in n8n credentials.
-- The webhooks use `allowedOrigins: *` for the demo; restrict them (origin + auth header) before any real deployment.
+- No API keys in the repository: secrets live only in `backend/.env` (git-ignored).
+- Alert text is treated as untrusted data (prompt-injection rules).
+- Actions are proposals; approved actions are recorded, execution is simulated.
+- Parameterized SQL queries; HTML escaping on the audit page.
+- CORS is open (`*`) for local use; add authentication before any public deployment.
 
 ## Tech stack
-n8n · Google Gemini (Flash) · VirusTotal API v3 · Google Sheets · HTML/CSS/JavaScript
+Python · FastAPI · Google Gemini (Flash, with model fallback) · VirusTotal API v3 · SQLite · HTML/CSS/JavaScript · n8n (first prototype)
 
 ## Author
 Albraa Yaseen Makhdoom — [LinkedIn](https://www.linkedin.com/in/albraa-makhdoom-9b1722347)

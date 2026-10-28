@@ -792,6 +792,7 @@ function fresh() {
 state = load(); if (!state) { state = fresh(); try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
 state.incidents.forEach(i => { i.notes = i.notes || []; i.history = i.history || []; if (!i.detector) i.detector = 'console'; });
 if (!Array.isArray(state.extra)) state.extra = [];
+if (!state.triageUrl && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(location.origin)) { state.triageUrl = location.origin + '/triage'; state.decisionUrl = location.origin + '/decision'; persist(); }
 if (state.exV !== 2) { state.incidents = state.incidents.filter(i => !i.example || i.id === 'INC-1044'); state.exV = 2; persist(); }
 const isLive = () => !!state.triageUrl;
 const pendingOf = inc => inc.actions.filter(a => a.status === 'pending');
@@ -828,7 +829,7 @@ const ACTOR = { system: B('System', 'النظام'), agent: B('Agent', 'الوك
 /* agent runs: live incidents show what really ran; examples show the target multi-agent design */
 const AGENTS = [
   { key: 'orch', code: 'OR', name: B('Orchestrator', 'المنسّق'), role: B('Decides which agents an alert needs, merges their results and sends approval requests.', 'يقرر أي الوكلاء يحتاجهم التنبيه، ويدمج نتائجهم، ويرسل طلبات الموافقة.'), tools: 'all agents · approval gateway', live: false },
-  { key: 'triage', code: 'TR', name: B('Triage', 'الفرز الأولي'), role: B('Classifies type, severity and confidence, lists missing information and proposes actions.', 'يصنّف النوع والخطورة والثقة، ويحدد المعلومات الناقصة ويقترح الإجراءات.'), tools: 'triage skill · NCA knowledge · VirusTotal URL lookup', live: true },
+  { key: 'triage', code: 'TR', name: B('Triage', 'الفرز الأولي'), role: B('Classifies type, severity and confidence, lists missing information and proposes actions.', 'يصنّف النوع والخطورة والثقة، ويحدد المعلومات الناقصة ويقترح الإجراءات.'), tools: 'Gemini 3.7 Flash · VirusTotal URL lookup · MITRE ATT&CK', live: true },
   { key: 'forensic', code: 'FO', name: B('Forensic investigation', 'التحقيق الجنائي الرقمي'), role: B('Rebuilds the incident timeline and the scope of impact.', 'يعيد بناء التسلسل الزمني للحادثة ونطاق أثرها.'), tools: 'read-only SIEM / EDR queries', live: false },
   { key: 'intel', code: 'TI', name: B('Threat intelligence', 'الاستخبارات الأمنية'), role: B('Checks indicators of compromise and maps activity to attacker techniques.', 'يفحص مؤشرات الاختراق ويربط النشاط بأساليب المهاجمين.'), tools: 'KEV · VirusTotal · AbuseIPDB · ATT&CK', live: false },
   { key: 'history', code: 'CH', name: B('Case history', 'الحالات السابقة'), role: B('Finds similar incidents the team resolved and what they decided.', 'يجد حوادث مشابهة حلّها الفريق وما قرره فيها.'), tools: 'past-cases base', live: false },
@@ -849,12 +850,12 @@ function runsOf(inc) {
 
 /* knowledge base: knowledge base shown on the platform */
 const KB = [
-  { id: 'ECC-2:2024', name: B('Essential Cybersecurity Controls (English)', 'الضوابط الأساسية للأمن السيبراني (إنجليزي)'), kind: B('Controls', 'ضوابط'), st: 'loaded' },
-  { id: 'ECC guide', name: B('ECC implementation guide', 'دليل تطبيق الضوابط الأساسية'), kind: B('Guide', 'دليل'), st: 'loaded' },
-  { id: 'CCC-2:2024', name: B('Cloud Cybersecurity Controls', 'ضوابط الأمن السيبراني للحوسبة السحابية'), kind: B('Controls', 'ضوابط'), st: 'loaded' },
-  { id: 'TCC', name: B('Telework Cybersecurity Controls', 'ضوابط الأمن السيبراني للعمل عن بعد'), kind: B('Controls', 'ضوابط'), st: 'loaded' },
-  { id: 'DCC-1:2022', name: B('Data Cybersecurity Controls (cleaned text)', 'ضوابط الأمن السيبراني للبيانات (نص منقّح)'), kind: B('Controls', 'ضوابط'), st: 'loaded' },
-  { id: 'OTCC-1:2022', name: B('Operational Technology Cybersecurity Controls (cleaned text)', 'ضوابط الأمن السيبراني للأنظمة التشغيلية (نص منقّح)'), kind: B('Controls', 'ضوابط'), st: 'loaded' },
+  { id: 'ECC-2:2024', name: B('Essential Cybersecurity Controls (English)', 'الضوابط الأساسية للأمن السيبراني (إنجليزي)'), kind: B('Controls', 'ضوابط'), st: 'prepared' },
+  { id: 'ECC guide', name: B('ECC implementation guide', 'دليل تطبيق الضوابط الأساسية'), kind: B('Guide', 'دليل'), st: 'prepared' },
+  { id: 'CCC-2:2024', name: B('Cloud Cybersecurity Controls', 'ضوابط الأمن السيبراني للحوسبة السحابية'), kind: B('Controls', 'ضوابط'), st: 'prepared' },
+  { id: 'TCC', name: B('Telework Cybersecurity Controls', 'ضوابط الأمن السيبراني للعمل عن بعد'), kind: B('Controls', 'ضوابط'), st: 'prepared' },
+  { id: 'DCC-1:2022', name: B('Data Cybersecurity Controls (cleaned text)', 'ضوابط الأمن السيبراني للبيانات (نص منقّح)'), kind: B('Controls', 'ضوابط'), st: 'prepared' },
+  { id: 'OTCC-1:2022', name: B('Operational Technology Cybersecurity Controls (cleaned text)', 'ضوابط الأمن السيبراني للأنظمة التشغيلية (نص منقّح)'), kind: B('Controls', 'ضوابط'), st: 'prepared' },
   { id: 'PDPL', name: B('Personal Data Protection Law', 'نظام حماية البيانات الشخصية'), kind: B('Law', 'نظام'), st: 'pending' },
   { id: 'CSCC', name: B('Critical Systems Cybersecurity Controls', 'ضوابط الأمن السيبراني للأنظمة الحساسة'), kind: B('Controls', 'ضوابط'), st: 'pending' }
 ];
@@ -1344,7 +1345,7 @@ outbound <span class="hl">185.220.101.45:443</span>
       <div class="grid-2" style="margin-top:28px"><div class="panel"><h3 style="margin-bottom:12px">${esc(X('Severity levels', 'درجات الخطورة'))}</h3><div class="table-wrap"><table><tbody>${sevRows.map(r => `<tr><td style="width:1%">${sevPill(r[0])}</td><td>${esc(L(r[1]))}</td></tr>`).join('')}</tbody></table></div></div>
       <div class="panel"><h3 style="margin-bottom:12px">${esc(X('How the project is evaluated', 'كيف يُقيَّم المشروع'))}</h3><ul class="clean">${metrics.map(m => `<li>${esc(L(m))}</li>`).join('')}</ul></div></div>`)}
 
-    ${sec('comp', X('Compliance', 'الامتثال'), X('Grounded in Saudi regulation', 'مستند إلى الأنظمة السعودية'), X('Reports cite the controls that apply, retrieved from the knowledge base and never from the model’s memory.', 'التقارير تستشهد بالضوابط المنطبقة، مسترجعة من قاعدة المعرفة لا من ذاكرة النموذج.'),
+    ${sec('comp', X('Compliance', 'الامتثال'), X('Grounded in Saudi regulation', 'مستند إلى الأنظمة السعودية'), X('In the target design, reports cite the controls that apply, retrieved from the knowledge base rather than the model’s memory. The current prototype suggests controls from the model; loading the documents is the next step.', 'في التصميم المستهدف تستشهد التقارير بالضوابط المنطبقة مسترجعةً من قاعدة المعرفة لا من ذاكرة النموذج. النموذج الحالي يقترح الضوابط من النموذج نفسه، وتحميل المستندات هو الخطوة التالية.'),
       `<div class="panel flush"><div class="table-wrap"><table><thead><tr><th>${esc(X('Situation', 'الحالة'))}</th><th>${esc(X('Control', 'الضابط'))}</th><th>${esc(X('Requirement', 'المتطلب'))}</th></tr></thead><tbody>${CONTROL_MAP.map(c => `<tr><td>${esc(L(c[0]))}</td><td class="mono" style="white-space:nowrap">${esc(c[1])}</td><td>${esc(L(c[2]))}</td></tr>`).join('')}</tbody></table></div></div>`)}
 
     ${sec('status', X('Project status', 'حالة المشروع'), X('What is built and what comes next', 'ما أُنجز وما يليه'), '',
@@ -1481,7 +1482,7 @@ function vIncident() {
   else if (ui.tab === 'timeline') body = `<ol class="timeline">${tl.map(e => `<li><span class="t">${esc(fmtDay(e.at))}<br>${esc(fmtClock(e.at))}</span><span class="dot ${e.kind}"></span><div><span class="who-l">${esc(L(ACTOR[e.actor]))}</span><div ${D(e.text)}>${esc(e.text)}</div></div></li>`).join('')}</ol>
     <div class="stack" style="gap:8px;margin-top:6px"><label for="noteInput">${esc(X('Add a note to the timeline', 'أضف ملاحظة للتسلسل'))}</label><div class="row" style="flex-wrap:nowrap"><input type="text" id="noteInput" dir="auto" placeholder="${esc(X('e.g. Called the user, travel confirmed', 'مثال: تم التواصل مع المستخدم وأكد أنه مسافر'))}"><button class="btn" type="button" data-act="addNote">${esc(X('Add', 'إضافة'))}</button></div></div>`;
   else if (ui.tab === 'entities') body = ents.length ? `<div class="entity-grid">${ents.map(e => `<div class="entity"><span class="k">${esc(L(ENT_NAME[e.kind]))}</span><span class="v">${esc(e.value)}</span>${state.incidents.filter(o => o !== inc && entitiesOf(o).some(x => x.value === e.value)).map(o => `<button class="btn small ghost" type="button" data-go="${esc(o.id)}" style="justify-self:start;margin-top:4px">${esc(X('Also in', 'يظهر أيضًا في'))} <span class="mono">${esc(o.id)}</span></button>`).join('')}</div>`).join('')}</div><p class="faint" style="font-size:.8rem;margin-top:12px">${esc(X('Extracted automatically from the alert text.', 'مستخرجة تلقائيًا من نص التنبيه.'))}</p>` : `<div class="empty"><p>${esc(X('No hosts, accounts or indicators found in the alert text.', 'لم يُعثر على أجهزة أو حسابات أو مؤشرات في نص التنبيه.'))}</p></div>`;
-  else if (ui.tab === 'agents') body = `<div>${runs.map(rn => { const a = AGENTS.find(x => x.key === rn.key); return `<div class="agent-row"><span class="agent-ic">${a.code}</span><div><div style="font-weight:500">${esc(L(a.name))}</div><div class="faint" style="font-size:.82rem" ${D(rn.out)}>${esc(rn.out)}</div></div><span class="mono faint">${esc(fmtDur(rn.sec))}</span></div>`; }).join('')}</div>
+  else if (ui.tab === 'agents') body = (inc.source !== 'live' ? `<div class="notice warn" style="margin-bottom:12px">${esc(X('Simulation: this example shows how the six agents are designed to work together. Only the triage agent runs today; real incidents show only what actually ran.', 'محاكاة: هذا المثال يوضح كيف صُمّم الوكلاء الستة ليعملوا معًا. وكيل الفرز وحده يعمل حاليًا، والحوادث الحقيقية تعرض فقط ما شُغّل فعلًا.'))}</div>` : '') + `<div>${runs.map(rn => { const a = AGENTS.find(x => x.key === rn.key); return `<div class="agent-row"><span class="agent-ic">${a.code}</span><div><div style="font-weight:500">${esc(L(a.name))}</div><div class="faint" style="font-size:.82rem" ${D(rn.out)}>${esc(rn.out)}</div></div><span class="mono faint">${esc(fmtDur(rn.sec))}</span></div>`; }).join('')}</div>
     <p class="faint" style="font-size:.8rem;margin-top:12px">${esc(inc.source === 'live' ? X('The current prototype runs one triage agent on its own backend.', 'النموذج الحالي يشغّل وكيل فرز واحد على خادم خاص.') : X('Example incidents show the target multi-agent design. The current prototype runs the triage agent only.', 'الحوادث التجريبية تعرض التصميم المستهدف متعدد الوكلاء، والنموذج الحالي يشغّل وكيل الفرز فقط.'))}</p>`;
   else body = `<div class="raw" ${D(inc.input)}>${esc(inc.input)}</div><div class="row" style="margin-top:10px"><button class="btn small" type="button" data-act="copyRaw">${esc(X('Copy', 'نسخ'))}</button></div>`;
   const canSet = st !== 'awaiting';
@@ -1522,7 +1523,7 @@ function vAnalyze() {
     </div>
     <div class="panel stack">
       <h2>${esc(X('What happens next', 'ما الذي يحدث بعد الإرسال'))}</h2>
-      <ol class="timeline">${[[ 'system', X('The alert is sent to the triage backend, and any URLs in it are checked in VirusTotal.', 'يُرسل التنبيه إلى خادم الفرز، وتُفحص الروابط التي فيه في VirusTotal.')], ['agent', X('The agent classifies type, severity and confidence, and checks the knowledge base for controls.', 'يصنّف الوكيل النوع والخطورة والثقة، ويرجع لقاعدة المعرفة للضوابط.')], ['agent', X('An incident opens here with the report, entities and timeline.', 'تُنشأ حادثة تتضمن التقرير والكيانات والتسلسل الزمني.')], ['gate', X('System-affecting actions wait in Approvals. Advisory ones stay as recommendations.', 'تنتظر الإجراءات المؤثرة في صفحة الموافقات، وتبقى الاستشارية توصيات.')], ['exec', X('Your decision is sent to the decision endpoint and recorded in the audit log.', 'يُرسَل قرارك إلى رابط القرارات ويُحفظ في سجل التدقيق.')]].map((s, i) => `<li><span class="t">${String(i + 1).padStart(2, '0')}</span><span class="dot ${s[0]}"></span><div>${esc(s[1])}</div></li>`).join('')}</ol>
+      <ol class="timeline">${[[ 'system', X('The alert is sent to the triage backend, and any URLs in it are checked in VirusTotal.', 'يُرسل التنبيه إلى خادم الفرز، وتُفحص الروابط التي فيه في VirusTotal.')], ['agent', X('The agent classifies type, severity and confidence, and proposes actions and preventive controls.', 'يصنّف الوكيل النوع والخطورة والثقة، ويقترح الإجراءات والضوابط الوقائية.')], ['agent', X('An incident opens here with the report, entities and timeline.', 'تُنشأ حادثة تتضمن التقرير والكيانات والتسلسل الزمني.')], ['gate', X('System-affecting actions wait in Approvals. Advisory ones stay as recommendations.', 'تنتظر الإجراءات المؤثرة في صفحة الموافقات، وتبقى الاستشارية توصيات.')], ['exec', X('Your decision is sent to the decision endpoint and recorded in the audit log.', 'يُرسَل قرارك إلى رابط القرارات ويُحفظ في سجل التدقيق.')]].map((s, i) => `<li><span class="t">${String(i + 1).padStart(2, '0')}</span><span class="dot ${s[0]}"></span><div>${esc(s[1])}</div></li>`).join('')}</ol>
       ${isLive() ? '' : `<div class="notice warn">${esc(X('Demo mode: results come from a simple built-in classifier. Connect the backend under Integrations to use the real agent.', 'الوضع التجريبي: النتائج صادرة عن مصنّف مبسّط مدمج. لاستخدام الوكيل الفعلي، اربط الخادم من صفحة التكاملات.'))} <button class="btn small" type="button" data-go="integrations">${esc(X('Integrations', 'التكاملات'))}</button></div>`}
     </div>
   </div>`;
@@ -1683,13 +1684,13 @@ function vAgents() {
 
 /* ================= KNOWLEDGE ================= */
 function vKnowledge() {
-  const loaded = KB.filter(k => k.st === 'loaded').length;
+  const loaded = KB.filter(k => k.st === 'prepared').length;
   return `<div class="split r">
-    <div class="panel flush"><div class="panel-head"><div><h2>${esc(X('Documents', 'المستندات'))}</h2><p class="muted" style="font-size:.85rem">${esc(X(`${loaded} of ${KB.length} loaded into the triage agent`, `${loaded} من ${KB.length} محمّلة في وكيل الفرز`))}</p></div></div>
+    <div class="panel flush"><div class="panel-head"><div><h2>${esc(X('Documents', 'المستندات'))}</h2><p class="muted" style="font-size:.85rem">${esc(X(`${loaded} of ${KB.length} prepared as clean text; loading them into the backend (RAG) is the next step`, `${loaded} من ${KB.length} جاهزة كنص منقّح، وتحميلها في الخادم (RAG) هو الخطوة التالية`))}</p></div></div>
       <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>${esc(X('Reference', 'المرجع'))}</th><th>${esc(X('Document', 'المستند'))}</th><th>${esc(X('Kind', 'النوع'))}</th><th>${esc(X('Status', 'الحالة'))}</th></tr></thead><tbody>
-      ${KB.map(k => `<tr><td class="mono" style="white-space:nowrap">${esc(k.id)}</td><td>${esc(L(k.name))}</td><td>${esc(L(k.kind))}</td><td>${k.st === 'loaded' ? `<span class="st st-contained">${esc(X('Loaded', 'محمّل'))}</span>` : `<span class="st st-awaiting">${esc(X('To add', 'للإضافة'))}</span>`}</td></tr>`).join('')}
+      ${KB.map(k => `<tr><td class="mono" style="white-space:nowrap">${esc(k.id)}</td><td>${esc(L(k.name))}</td><td>${esc(L(k.kind))}</td><td>${k.st === 'prepared' ? `<span class="st st-new">${esc(X('Prepared', 'جاهز'))}</span>` : `<span class="st st-awaiting">${esc(X('To add', 'للإضافة'))}</span>`}</td></tr>`).join('')}
       </tbody></table></div>
-      <p class="faint" style="font-size:.8rem;padding:12px 18px">${esc(X('Arabic PDFs whose text could not be extracted were replaced with cleaned text versions before loading.', 'استُبدلت ملفات PDF العربية التي تعذّر استخراج نصها بنسخ نصية منقّحة قبل تحميلها.'))}</p></div>
+      <p class="faint" style="font-size:.8rem;padding:12px 18px">${esc(X('Arabic PDFs whose text could not be extracted were replaced with cleaned text versions. They were used with the first n8n prototype and are not yet loaded into the new backend.', 'استُبدلت ملفات PDF العربية التي تعذّر استخراج نصها بنسخ نصية منقّحة. استُخدمت مع نموذج n8n الأول، ولم تُحمَّل بعد في الخادم الجديد.'))}</p></div>
     <div class="panel"><h2 style="margin-bottom:12px">${esc(X('Tools', 'الأدوات'))}</h2>${TOOLS.map(t => `<div class="agent-row" style="grid-template-columns:minmax(0,1fr) auto"><div><div style="font-weight:500">${esc(t.name)}</div><div class="faint" style="font-size:.8rem">${esc(L(t.how))}</div></div>${t.st === 'active' ? `<span class="st st-contained">${esc(X('Active', 'مفعّل'))}</span>` : `<span class="st">${esc(X('Planned', 'مخطط'))}</span>`}</div>`).join('')}</div>
   </div>
   <div class="panel flush"><div class="panel-head"><h2>${esc(X('Controls cited by incident type', 'الضوابط المستشهد بها حسب نوع الحادثة'))}</h2></div><div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>${esc(X('Situation', 'الحالة'))}</th><th>${esc(X('Control', 'الضابط'))}</th><th>${esc(X('Requirement', 'المتطلب'))}</th><th>${esc(X('Incidents citing it', 'الحوادث المستشهدة'))}</th></tr></thead><tbody>
@@ -1755,7 +1756,7 @@ function vIntegrations() {
       <p class="muted">${esc(X('Paste the two backend endpoints. They are saved in this browser only.', 'الصق رابطَي الخادم، وسيُحفظان في هذا المتصفح فقط.'))}</p>
       <div><label for="triageUrl">${esc(X('Triage endpoint (POST)', 'رابط الفرز (POST)'))}</label><input type="url" id="triageUrl" dir="ltr" placeholder="http://127.0.0.1:8000/triage" value="${esc(state.triageUrl)}"></div>
       <div><label for="decisionUrl">${esc(X('Decision endpoint (POST)', 'رابط القرارات (POST)'))}</label><input type="url" id="decisionUrl" dir="ltr" placeholder="http://127.0.0.1:8000/decision" value="${esc(state.decisionUrl)}"></div>
-      <div class="row"><button class="btn primary" type="button" data-act="saveConn">${esc(X('Save', 'حفظ'))}</button><button class="btn" type="button" data-act="testConn">${esc(X('Test connection', 'اختبار الاتصال'))}</button>${state.triageUrl || state.decisionUrl ? `<button class="btn ghost" type="button" data-act="clearConn">${esc(X('Disconnect', 'قطع الاتصال'))}</button>` : ''}</div>
+      <div class="row"><button class="btn primary" type="button" data-act="saveConn">${esc(X('Save', 'حفظ'))}</button><button class="btn" type="button" data-act="testConn">${esc(X('Test connection', 'اختبار الاتصال'))}</button><button class="btn" type="button" data-act="useLocal">${esc(X('Use local server', 'استخدام الخادم المحلي'))}</button>${state.triageUrl || state.decisionUrl ? `<button class="btn ghost" type="button" data-act="clearConn">${esc(X('Disconnect', 'قطع الاتصال'))}</button>` : ''}</div>
       <div id="connStatus"></div>
       <div class="notice">${esc(X('The platform is the approval gateway: the agent only proposes actions, and nothing happens without an analyst decision. If the browser blocks this page from reaching the local server, open the page from the server itself (127.0.0.1:8000/app) or from the downloaded HTML file.', 'المنصة هي بوابة الموافقة: يقترح الوكيل فقط، ولا يحدث شيء دون قرار المحلل. إذا منع المتصفح هذه الصفحة من الوصول للخادم المحلي، افتحها من الخادم نفسه (127.0.0.1:8000/app) أو من ملف HTML المحفوظ.'))}</div>
       <div><h3 style="margin-bottom:8px">${esc(X('Running the backend', 'تشغيل الخادم'))}</h3><ol class="clean" style="padding-inline-start:1.4em">${steps.map(s => `<li style="font-size:.88rem">${esc(L(s))}</li>`).join('')}</ol></div>
@@ -1772,12 +1773,23 @@ async function testConnection() {
   const st = $('#connStatus'); const url = ($('#triageUrl').value || '').trim();
   if (!url) { st.innerHTML = `<div class="notice error">${esc(X('Paste the triage endpoint first.', 'الصق رابط الفرز أولًا.'))}</div>`; return; }
   st.innerHTML = `<div class="progress"><span class="spinner"></span><span>${esc(X('Calling the backend…', 'جاري الاتصال بالخادم…'))}</span></div>`;
+  // health check: GET the server root (fast, does not call Gemini)
+  const base = url.replace(/\/triage\/?$/, '');
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alert: 'Connection test from the AI SOC Agents platform. No incident. Reply with a low-severity classification.', language: state.lang, test: true }) });
+    const res = await fetch(base + '/', { signal: ctrl.signal }); clearTimeout(to);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    state.triageUrl = url; persist(); chrome();
-    st.innerHTML = `<div class="notice ok">${esc(X('The backend answered. Live mode is on.', 'استجاب الخادم، وتم تفعيل الوضع المباشر.'))}</div>`;
-  } catch (e) { st.innerHTML = `<div class="notice error">${esc(X('No answer from the backend. Check that the server is running (uvicorn) and the URL is correct.', 'لم يستجب الخادم. تحقق من أن الخادم يعمل (uvicorn) ومن صحة الرابط.'))} <span class="mono">(${esc(e.message || e)})</span></div>`; }
+    const h = await res.json().catch(() => ({}));
+    state.triageUrl = url; state.decisionUrl = ($('#decisionUrl').value || '').trim() || state.decisionUrl; persist(); chrome();
+    const info = [h.model ? 'Model: ' + h.model : '', h.virustotal === true ? 'VirusTotal: ON' : h.virustotal === false ? 'VirusTotal: OFF' : ''].filter(Boolean).join(' · ');
+    st.innerHTML = `<div class="notice ok">${esc(X('The backend answered. Live mode is on.', 'استجاب الخادم، وتم تفعيل الوضع المباشر.'))}${info ? ` <span class="mono">(${esc(info)})</span>` : ''}</div>`;
+  } catch (e) {
+    clearTimeout(to);
+    const timeout = e && e.name === 'AbortError';
+    st.innerHTML = `<div class="notice error">${esc(timeout
+      ? X('No answer within 8 seconds. Either the server is not running, or the browser is blocking this page from reaching your computer (look for a permission prompt near the address bar, or open 127.0.0.1:8000/app instead).', 'لا رد خلال 8 ثوانٍ: إما أن الخادم لا يعمل، أو أن المتصفح يمنع هذه الصفحة من الوصول لجهازك (ابحث عن نافذة إذن بجانب شريط العنوان، أو افتح 127.0.0.1:8000/app بدلًا منها).')
+      : X('No answer from the backend. Check that the server is running (uvicorn) and the URL is correct.', 'لم يستجب الخادم. تحقق من أن الخادم يعمل (uvicorn) ومن صحة الرابط.'))} <span class="mono">(${esc(e.message || e)})</span></div>`;
+  }
 }
 
 /* ================= events ================= */
@@ -1803,6 +1815,7 @@ document.addEventListener('click', e => {
   else if (act === 'clearEx') { state.incidents = state.incidents.filter(i => !i.example); persist(); if (route === 'incident' && !findInc(incRoute)) go('incidents'); else render(); toast(X('Example data removed.', 'تم حذف البيانات التجريبية.')); }
   else if (act === 'addNote') { const inp = $('#noteInput'); const v = (inp.value || '').trim(); if (!v) { inp.focus(); return; } const inc = findInc(incRoute); inc.notes.push({ at: new Date().toISOString(), text: v }); persist(); render(); }
   else if (act === 'copyRaw') copyText(findInc(incRoute).input);
+  else if (act === 'useLocal') { state.triageUrl = 'http://127.0.0.1:8000/triage'; state.decisionUrl = 'http://127.0.0.1:8000/decision'; persist(); render(); toast(X('Local server set. Press Test connection.', 'تم ضبط الخادم المحلي. اضغط اختبار الاتصال.')); }
   else if (act === 'saveConn') { state.triageUrl = ($('#triageUrl').value || '').trim(); state.decisionUrl = ($('#decisionUrl').value || '').trim(); persist(); render(); toast(X('Saved.', 'تم الحفظ.')); }
   else if (act === 'clearConn') { state.triageUrl = ''; state.decisionUrl = ''; persist(); render(); toast(X('Disconnected. The platform is back in demo mode.', 'تم قطع الاتصال، وعادت المنصة إلى الوضع التجريبي.')); }
   else if (act === 'testConn') testConnection();
